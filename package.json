@@ -2,6 +2,9 @@
   "name": "beth-todo",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx"
+  },
   "devDependencies": {
     "bun-types": "latest",
     "drizzle-kit": "^0.19.13",
@@ -11,7 +14,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@elysiajs/html": "^0.6.0",
+    "@elysiajs/html": "^0.6.5",
     "@libsql/client": "^0.3.2",
     "drizzle-orm": "^0.28.6",
     "elysia": "^0.6.17"

@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { html } from '@elysiajs/html';
-import * as elements from 'typed-html';
+import { ConwayBoard, ConwaySquare } from './conway';
 
 const BaseHtml = ({ children }: elements.Children) => (`
 <!DOCTYPE html>
@@ -30,6 +30,14 @@ const db: Todo[] = [
     {
         id: 2, content: 'Learn bun', completed: true
     }
+];
+
+let boardState = [
+    [false,false,false,false,false],
+    [false,false,false,false,false],
+    [false,false,false,false,false],
+    [false,false,false,false,false],
+    [false,false,false,false,false],
 ];
 
 function TodoItem({id, content, completed}: Todo) {
@@ -78,13 +86,28 @@ const app = new Elysia()
         <BaseHtml>
             <body 
                 class="flex w-full h-screen justify-center items-center"
-                hx-get="/todos"
+                //hx-get="/todos"
+                hx-get="/conway"
                 hx-trigger="load"
                 hx-swap="innerHTML">                
             </body>
         </BaseHtml>))
     .post("/clicked", () => <div class="text-blue-600">You did it</div>)
     .get("/todos", () => <TodoList todos={db} />)
+    .get("/conway", () => <ConwayBoard boardState={boardState}/>)
+    .post("/conway/toggle/:row/:col", 
+    ({params: {row, col}}) => {
+        const cloneBoardState = [...boardState];
+        cloneBoardState[row][col] = !cloneBoardState[row][col];
+        boardState = cloneBoardState;
+        return <ConwayBoard boardState={cloneBoardState}/>
+    },
+    {
+        params: t.Object({
+            row: t.Numeric(),
+            col: t.Numeric()
+        })
+    })
     .post("/todos/toggle/:id", 
         ({ params }) => {
             const todo = db.find(todo => todo.id === params.id)
