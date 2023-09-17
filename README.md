@@ -1,4 +1,4 @@
-# beth-todo
+# beth-conway
 
 To install dependencies:
 
