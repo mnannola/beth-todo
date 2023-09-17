@@ -17,68 +17,16 @@ ${children}
 </html>
 `);
 
-type Todo = {
-    id: number;
-    content: string;
-    completed: boolean;
+let boardRowCount = 20;
+let boardState:boolean[][];
+let shouldStopPolling = false;
+let isPolling = false;
+
+function initializeBoardState() {
+    boardState = Array.from(Array(boardRowCount), _ => Array(boardRowCount).fill(false));
 }
 
-const db: Todo[] = [
-    {
-        id: 1, content: 'Learn htmx', completed: false
-    },
-    {
-        id: 2, content: 'Learn bun', completed: true
-    }
-];
-
-let boardState = [
-    [false,false,false,false,false],
-    [false,false,false,false,false],
-    [false,false,false,false,false],
-    [false,false,false,false,false],
-    [false,false,false,false,false],
-];
-
-function TodoItem({id, content, completed}: Todo) {
-    return (
-        <div class="flex flex-row space-x-3">
-            <p>{content}</p>
-            <input 
-                type="checkbox" 
-                checked={completed}
-                hx-post={`/todos/toggle/${id}`}
-                hx-target="closest div"
-                hx-swap="outerHTML">                    
-            </input>
-            <button 
-                class="text-red-500"
-                hx-delete={`/todos/${id}`}
-                hx-target="closest div"
-                hx-swap="outerHTML">X</button>
-        </div>
-    )
-}
-
-function TodoList({ todos }: { todos: Todo[]}) {
-    return (
-        <div>
-            {todos.map(({id, content, completed}) => <TodoItem id={id} content={content} completed={completed} />)}
-            <TodoForm/>
-        </div>        
-    )
-}
-
-function TodoForm() {
-    return (
-        <form hx-post="/todos" hx-swap="beforebegin">
-            <label for="content">Content: </label>
-            <input name="content" type="text" class="border border-black"></input>
-
-            <button type="submit">Create</button>        
-        </form>
-    )
-}
+initializeBoardState();
 
 const app = new Elysia()
     .use(html())
@@ -86,21 +34,17 @@ const app = new Elysia()
         <BaseHtml>
             <body 
                 class="flex w-full h-screen justify-center items-center"
-                //hx-get="/todos"
                 hx-get="/conway"
                 hx-trigger="load"
                 hx-swap="innerHTML">                
             </body>
         </BaseHtml>))
     .post("/clicked", () => <div class="text-blue-600">You did it</div>)
-    .get("/todos", () => <TodoList todos={db} />)
     .get("/conway", () => <ConwayBoard boardState={boardState}/>)
     .post("/conway/toggle/:row/:col", 
     ({params: {row, col}}) => {
-        const cloneBoardState = [...boardState];
-        cloneBoardState[row][col] = !cloneBoardState[row][col];
-        boardState = cloneBoardState;
-        return <ConwayBoard boardState={cloneBoardState}/>
+        boardState[row][col] = !boardState[row][col];
+        return <ConwayBoard boardState={boardState}/>
     },
     {
         params: t.Object({
@@ -108,49 +52,90 @@ const app = new Elysia()
             col: t.Numeric()
         })
     })
-    .post("/todos/toggle/:id", 
-        ({ params }) => {
-            const todo = db.find(todo => todo.id === params.id)
-            if (todo) {
-                todo.completed = !todo.completed;
-                return <TodoItem {...todo}/>
-            }            
-        },
-        {
-            params: t.Object({
-                id: t.Numeric(),
-            })
-        })
-    .delete("/todos/:id", 
-        ({params}) => {
-            const todo = db.find(todo => todo.id === params.id);
-            if (todo) {
-                db.splice(db.findIndex(todo => todo.id === params.id), 1);
-            }
-        },
-        {
-            params: t.Object({
-                id: t.Numeric()
-            })
-        })
-    .post('/todos', 
-        ({body}) => {
-            if (body) {
-                const newTodo = {
-                    id: db.length,
-                    content: body.content,
-                    completed: false
-                };
-                db.push(newTodo);
-                return <TodoItem {...newTodo} />
-            }            
-        },
-        {
-            body: t.Object({
-                content: t.String()
-            })
-        })
+    .post("/conway/clear", () => {
+        initializeBoardState();
+        return <ConwayBoard boardState={boardState}/>
+    })
+    .post("/conway/next", ({set}) => {
+        if (shouldStopPolling) {
+            shouldStopPolling = false;            
+            set.status = 286;
+            return <ConwayBoard boardState={boardState} isPolling={isPolling}/>
+        }
+        boardTick();
+        
+        return <ConwayBoard boardState={boardState} isPolling={isPolling}/>
+    })
+    .post("/conway/stop", () => {
+        shouldStopPolling = true;
+        isPolling = false;
+        return <ConwayBoard boardState={boardState} isPolling={isPolling}/>
+    })
+    .post("/conway/play", () => {
+        isPolling = true;
+        return <ConwayBoard boardState={boardState} isPolling={isPolling}/>
+    })
     .listen(3000);
 
 console.log(`🦊 Elysia is running at http://${app.server?.hostname}:${app.server?.port}`);
+
+function boardTick() {
+    const clonedBoardState = boardState.map(row => row.slice());
+    // Loop through each square
+    for (let i = 0; i < boardState.length; i++) {
+        for (let j = 0; j < boardState[i].length; j++) {
+            const isAlive = boardState[i][j];
+
+            let aliveCount = getAliveCount(i, j);
+            if (isAlive) {         
+                if (aliveCount > 1 && aliveCount < 4) {
+                    // square stays alive
+                    clonedBoardState[i][j] = true;
+                }
+                else {
+                    clonedBoardState[i][j] = false;
+                }
+            } else {
+                // current square is dead
+                // it's alive if it has 3 live neighbors
+                clonedBoardState[i][j] = aliveCount === 3;
+            }
+        }
+    }
+    boardState = clonedBoardState;
+}
+
+function getAliveCount(i: number, j: number) {
+    let squareStatus: boolean[] = [];
+    
+    for (let iRow = i-1; iRow < i+2; iRow++) {
+        for (let jRow = j-1; jRow < j+2; jRow++) {
+            if (iRow === i && jRow === j) {
+                continue;
+            }
+            pushSquareStatus(iRow, jRow, squareStatus);
+        }
+    }    
+    /* pushSquareStatus(i-1, j-1, squareStatus);
+    pushSquareStatus(i-1, j, squareStatus);
+    squareStatus.push(getSquareValue[i - 1][j + 1]);
+    squareStatus.push(getSquareValue[i][j - 1]);
+    squareStatus.push(getSquareValue[i][j + 1]);
+    squareStatus.push(getSquareValue[i + 1][j - 1]);
+    squareStatus.push(getSquareValue[i + 1][j]);
+    squareStatus.push(getSquareValue[i + 1][j + 1]); */
+
+    let aliveCount = squareStatus.reduce((acc, cur) => {
+        const squareAliveCount = cur ? 1 : 0;
+        return acc + squareAliveCount;
+    }, 0);    
+    return aliveCount;
+}
+function pushSquareStatus(i: number, j:number, squareStatus: boolean[]) {
+    squareStatus.push(getSquareValue(i,j));
+}
+function getSquareValue(i: number, j: number): boolean {
+    const squareValue = !!boardState?.[i]?.[j];    
+    return squareValue;
+} 
 
